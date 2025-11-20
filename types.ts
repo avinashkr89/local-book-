@@ -57,5 +57,7 @@ export interface Booking {
   time: string;
   amount: number;
   status: BookingStatus;
+  rating?: number;
+  review?: string;
   createdAt: string;
 }

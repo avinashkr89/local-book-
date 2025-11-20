@@ -1,32 +1,65 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../services/authContext';
-import { getBookings } from '../services/db';
-import { Booking } from '../types';
-import { Calendar, MapPin, Clock, AlertCircle } from 'lucide-react';
+import { getBookings, addBookingRating } from '../services/db';
+import { Booking, BookingStatus } from '../types';
+import { Calendar, MapPin, Clock, AlertCircle, Star, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const Dashboard = () => {
   const { user } = useAuth();
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Rating Modal State
+  const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
+  const [selectedBookingForRating, setSelectedBookingForRating] = useState<Booking | null>(null);
+  const [ratingValue, setRatingValue] = useState(5);
+  const [reviewText, setReviewText] = useState('');
 
   useEffect(() => {
-    const load = async () => {
-      if (user) {
-        try {
-          const allBookings = await getBookings();
-          const filtered = allBookings.filter(b => b.customerId === user.id);
-          // Sort by newest first (local sort after fetch)
-          setMyBookings(filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-        } catch (e) {
-          toast.error('Could not load bookings');
-        } finally {
-          setLoading(false);
-        }
-      }
-    };
-    load();
+    loadBookings();
   }, [user]);
+
+  const loadBookings = async () => {
+    if (user) {
+      try {
+        const allBookings = await getBookings();
+        const filtered = allBookings.filter(b => b.customerId === user.id);
+        // Sort by newest first
+        setMyBookings(filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      } catch (e) {
+        toast.error('Could not load bookings');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const openRatingModal = (booking: Booking) => {
+    setSelectedBookingForRating(booking);
+    setRatingValue(5);
+    setReviewText('');
+    setIsRatingModalOpen(true);
+  };
+
+  const submitRating = async () => {
+    if (!selectedBookingForRating) return;
+
+    const toastId = toast.loading('Submitting feedback...');
+    try {
+      await addBookingRating(
+        selectedBookingForRating.id,
+        ratingValue,
+        reviewText,
+        selectedBookingForRating.providerId || undefined
+      );
+      toast.success('Thank you for your feedback!', { id: toastId });
+      setIsRatingModalOpen(false);
+      loadBookings(); // Reload to show the rating is done
+    } catch (e) {
+      toast.error('Failed to submit feedback', { id: toastId });
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -40,7 +73,7 @@ export const Dashboard = () => {
     }
   };
 
-  if (loading) return <div>Loading your dashboard...</div>;
+  if (loading) return <div className="p-4">Loading your dashboard...</div>;
 
   return (
     <div className="space-y-6">
@@ -64,12 +97,30 @@ export const Dashboard = () => {
                     <p className="text-lg font-medium text-indigo-600 truncate">
                       {booking.service?.name || 'Service'}
                     </p>
-                    <div className="ml-2 flex-shrink-0 flex">
-                      <p className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(booking.status)}`}>
+                    <div className="flex items-center space-x-2">
+                      <div className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(booking.status)}`}>
                         {booking.status}
-                      </p>
+                      </div>
+                      
+                      {/* Rating Button - Only for Completed & Unrated bookings */}
+                      {booking.status === BookingStatus.COMPLETED && !booking.rating && (
+                        <button 
+                          onClick={() => openRatingModal(booking)}
+                          className="text-xs font-medium text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1 rounded-full shadow-sm transition-colors flex items-center"
+                        >
+                          <Star size={12} className="mr-1" fill="currentColor" /> Rate Service
+                        </button>
+                      )}
+
+                      {booking.rating && (
+                        <div className="flex items-center text-yellow-500">
+                          <Star size={14} fill="currentColor" />
+                          <span className="text-xs font-bold ml-1">{booking.rating}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
+                  
                   <div className="mt-2 sm:flex sm:justify-between">
                     <div className="sm:flex">
                       <p className="flex items-center text-sm text-gray-500">
@@ -94,10 +145,61 @@ export const Dashboard = () => {
                       <span className="font-semibold">Assigned Professional:</span> {booking.provider.user?.name} ({booking.provider.skill})
                     </div>
                   )}
+                  {booking.review && (
+                    <div className="mt-2 text-sm text-gray-600 italic">
+                      " {booking.review} "
+                    </div>
+                  )}
                 </div>
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Rating Modal */}
+      {isRatingModalOpen && (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 animate-slide-up">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Rate Service</h3>
+              <button onClick={() => setIsRatingModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
+            </div>
+            
+            <div className="text-center mb-6">
+              <p className="text-sm text-gray-500 mb-4">How was the service provided by <br/> <span className="font-bold text-gray-800">{selectedBookingForRating?.provider?.user?.name || 'the provider'}</span>?</p>
+              
+              <div className="flex justify-center space-x-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRatingValue(star)}
+                    className={`transform transition-transform hover:scale-110 focus:outline-none ${star <= ratingValue ? 'text-yellow-400' : 'text-gray-200'}`}
+                  >
+                    <Star size={32} fill="currentColor" />
+                  </button>
+                ))}
+              </div>
+              <p className="text-sm font-bold text-indigo-600 mt-2">
+                {ratingValue === 5 ? 'Excellent!' : ratingValue === 4 ? 'Good' : ratingValue === 3 ? 'Average' : 'Poor'}
+              </p>
+            </div>
+
+            <textarea 
+              className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none"
+              rows={3}
+              placeholder="Write a short review..."
+              value={reviewText}
+              onChange={(e) => setReviewText(e.target.value)}
+            ></textarea>
+
+            <button 
+              onClick={submitRating}
+              className="w-full mt-4 bg-indigo-600 text-white font-bold py-2 rounded-lg hover:bg-indigo-700 shadow-lg transition-all"
+            >
+              Submit Review
+            </button>
+          </div>
         </div>
       )}
     </div>

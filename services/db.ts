@@ -44,6 +44,8 @@ const mapBooking = (row: any): Booking => ({
   time: row.time,
   amount: row.amount,
   status: row.status as BookingStatus,
+  rating: row.rating,
+  review: row.review,
   createdAt: row.created_at,
   customer: row.customer ? mapUser(row.customer) : undefined,
   service: row.service ? mapService(row.service) : undefined,
@@ -53,24 +55,28 @@ const mapBooking = (row: any): Booking => ({
 // --- DB INITIALIZATION (SEEDING) ---
 export const initializeDB = async () => {
   try {
-    // Check if services exist to determine if seeding is needed
+    // 1. Ensure Specific Admin Exists
+    const adminEmail = 'avinashkr502080@gmail.com';
+    const { data: existingAdmin } = await supabase.from('users').select('*').eq('email', adminEmail).single();
+    
+    if (!existingAdmin) {
+      console.log('Creating Admin User...');
+      await supabase.from('users').insert({
+        name: 'Avinash Admin',
+        email: adminEmail,
+        password_hash: 'Avinash@10',
+        role: 'ADMIN',
+        phone: '9999999999'
+      });
+    }
+
+    // 2. Check general seeding (Services)
     const { count } = await supabase.from('services').select('*', { count: 'exact', head: true });
     
     if (count === 0) {
-      console.log('Seeding Database...');
+      console.log('Seeding Services & Demo Data...');
 
-      // 1. Seed Admin
-      const { data: adminUser, error: adminError } = await supabase.from('users').insert({
-        name: 'System Admin',
-        email: 'admin@localbookr.com',
-        password_hash: 'Admin@123',
-        role: 'ADMIN',
-        phone: '9999999999'
-      }).select().single();
-      
-      if(adminError) console.error('Admin seed error', adminError);
-
-      // 2. Seed Services
+      // Seed Services
       const seedServices = [
         { name: 'Plumber', description: 'Fix leaks, pipes, and tap installations.', base_price: 400, icon: 'Wrench' },
         { name: 'Electrician', description: 'Fan repair, switchboard installation, wiring.', base_price: 350, icon: 'Zap' },
@@ -79,7 +85,7 @@ export const initializeDB = async () => {
       ];
       await supabase.from('services').insert(seedServices);
 
-      // 3. Seed Demo Customer
+      // Seed Demo Customer
       await supabase.from('users').insert({
         name: 'Rahul Patil',
         email: 'customer@demo.com',
@@ -88,24 +94,6 @@ export const initializeDB = async () => {
         phone: '8888888888'
       });
 
-      // 4. Seed Demo Provider
-      const { data: provUser } = await supabase.from('users').insert({
-        name: 'Suresh Electric',
-        email: 'provider@demo.com',
-        password_hash: '123456',
-        role: 'PROVIDER',
-        phone: '7777777777'
-      }).select().single();
-
-      if (provUser) {
-        await supabase.from('providers').insert({
-          user_id: provUser.id,
-          skill: 'Electrician',
-          area: 'Cidco',
-          rating: 4.5,
-          is_active: true
-        });
-      }
       console.log('Seeding Complete');
     }
   } catch (error) {
@@ -143,7 +131,7 @@ export const findUserByEmail = async (email: string): Promise<User | undefined> 
 
 // 2. Services
 export const getServices = async (): Promise<Service[]> => {
-  const { data, error } = await supabase.from('services').select('*');
+  const { data, error } = await supabase.from('services').select('*').order('name');
   if (error) throw error;
   return data.map(mapService);
 };
@@ -158,6 +146,18 @@ export const createService = async (service: Omit<Service, 'id' | 'createdAt'>):
   
   if (error) throw error;
   return mapService(data);
+};
+
+export const updateService = async (id: string, updates: Partial<Service>) => {
+  // Map camelCase to snake_case
+  const dbUpdates: any = {};
+  if (updates.name) dbUpdates.name = updates.name;
+  if (updates.description) dbUpdates.description = updates.description;
+  if (updates.basePrice !== undefined) dbUpdates.base_price = updates.basePrice;
+  if (updates.icon) dbUpdates.icon = updates.icon;
+
+  const { error } = await supabase.from('services').update(dbUpdates).eq('id', id);
+  if (error) throw error;
 };
 
 export const deleteService = async (id: string) => {
@@ -191,6 +191,7 @@ export const updateProvider = async (id: string, updates: Partial<Provider>) => 
   if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
   if (updates.skill) dbUpdates.skill = updates.skill;
   if (updates.area) dbUpdates.area = updates.area;
+  if (updates.rating !== undefined) dbUpdates.rating = updates.rating;
 
   const { error } = await supabase.from('providers').update(dbUpdates).eq('id', id);
   if (error) throw error;
@@ -247,4 +248,27 @@ export const updateBookingStatus = async (id: string, status: BookingStatus, pro
   
   const { error } = await supabase.from('bookings').update(updates).eq('id', id);
   if (error) throw error;
+};
+
+export const addBookingRating = async (bookingId: string, rating: number, review: string, providerId: string | undefined) => {
+  // 1. Update the booking with rating/review
+  const { error } = await supabase.from('bookings').update({ rating, review }).eq('id', bookingId);
+  if (error) throw error;
+
+  // 2. If a provider was attached, recalculate their average rating
+  if (providerId) {
+    const { data: providerBookings, error: fetchError } = await supabase
+      .from('bookings')
+      .select('rating')
+      .eq('provider_id', providerId)
+      .not('rating', 'is', null);
+    
+    if (!fetchError && providerBookings && providerBookings.length > 0) {
+      const total = providerBookings.reduce((sum: number, b: any) => sum + Number(b.rating), 0);
+      const avgRating = Number((total / providerBookings.length).toFixed(1));
+      
+      // 3. Update Provider Table
+      await supabase.from('providers').update({ rating: avgRating }).eq('id', providerId);
+    }
+  }
 };

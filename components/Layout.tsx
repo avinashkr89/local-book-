@@ -147,7 +147,14 @@ export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
               <span className="font-bold text-gray-900 text-lg">LocalBookr</span>
               <p className="text-gray-500 text-sm">Trusted services in Aurangabad.</p>
            </div>
-          <p className="text-center text-gray-400 text-sm">© 2024 LocalBookr Inc. All rights reserved.</p>
+           
+           {/* Developer Credit */}
+           <div className="text-center">
+             <p className="text-gray-600 font-medium text-sm bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-2 rounded-full border border-gray-100 shadow-sm">
+               Developed with <span className="text-red-500 animate-pulse">❤️</span> by <span className="text-indigo-600 font-bold">AVINASH</span>
+             </p>
+             <p className="text-xs text-gray-400 mt-1">© 2025 LocalBookr Inc.</p>
+           </div>
         </div>
       </footer>
     </div>
