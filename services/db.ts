@@ -1,3 +1,4 @@
+
 import { supabase } from './supabase';
 import { User, Service, Provider, Booking, Role, BookingStatus } from '../types';
 
@@ -55,18 +56,30 @@ const mapBooking = (row: any): Booking => ({
 // --- DB INITIALIZATION (SEEDING) ---
 export const initializeDB = async () => {
   try {
-    // 1. Ensure Specific Admin Exists
+    // 1. Ensure Specific Admin Exists and has Correct Role/Password
     const adminEmail = 'avinashkr502080@gmail.com';
+    const targetPassword = 'Avinash@10';
+    
     const { data: existingAdmin } = await supabase.from('users').select('*').eq('email', adminEmail).single();
     
-    if (!existingAdmin) {
+    if (existingAdmin) {
+      // If user exists but is not ADMIN or password doesn't match, update them
+      if (existingAdmin.role !== 'ADMIN' || existingAdmin.password_hash !== targetPassword) {
+        console.log('Fixing Admin Permissions...');
+        await supabase.from('users').update({
+          role: 'ADMIN',
+          password_hash: targetPassword,
+          name: 'Avinash Admin' 
+        }).eq('email', adminEmail);
+      }
+    } else {
       console.log('Creating Admin User...');
       await supabase.from('users').insert({
         name: 'Avinash Admin',
         email: adminEmail,
-        password_hash: 'Avinash@10',
+        password_hash: targetPassword,
         role: 'ADMIN',
-        phone: '9999999999'
+        phone: '8920636919'
       });
     }
 
