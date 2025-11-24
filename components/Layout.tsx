@@ -1,18 +1,43 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../services/authContext';
-import { Role } from '../types';
-import { LogOut, User as UserIcon, Menu, X, ChevronRight } from 'lucide-react';
+import { getNotifications, markNotificationRead } from '../services/db';
+import { Role, Notification } from '../types';
+import { LogOut, User as UserIcon, Menu, X, ChevronRight, Bell } from 'lucide-react';
 
 export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  
+  // Notification State
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifs, setShowNotifs] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      // Poll notifications every 10s (Simulating real-time)
+      const fetchNotifs = async () => {
+        const data = await getNotifications(user.id);
+        setNotifications(data);
+      };
+      fetchNotifs();
+      const interval = setInterval(fetchNotifs, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  const handleNotifClick = async (id: string) => {
+    await markNotificationRead(id);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
   const NavLink = ({ to, label }: { to: string, label: string }) => {
@@ -63,25 +88,60 @@ export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
             
             {/* Desktop Auth */}
             <div className="hidden md:block">
-              <div className="ml-4 flex items-center md:ml-6">
+              <div className="ml-4 flex items-center md:ml-6 space-x-4">
                 {user ? (
-                  <div className="flex items-center space-x-4 bg-gray-100 px-4 py-1.5 rounded-full">
-                    <div className="flex flex-col items-end">
-                       <span className="text-gray-900 text-sm font-semibold leading-none">{user.name}</span>
-                       <span className="text-xs text-gray-500 uppercase tracking-wider">{user.role}</span>
+                  <>
+                    {/* Notification Bell */}
+                    <div className="relative">
+                      <button 
+                        onClick={() => setShowNotifs(!showNotifs)}
+                        className="p-2 text-gray-500 hover:text-indigo-600 relative"
+                      >
+                        <Bell size={20} />
+                        {unreadCount > 0 && (
+                          <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
+                        )}
+                      </button>
+                      
+                      {showNotifs && (
+                        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl ring-1 ring-black ring-opacity-5 py-1 z-50 max-h-96 overflow-y-auto">
+                           <div className="px-4 py-2 border-b text-xs font-bold text-gray-400 uppercase">Notifications</div>
+                           {notifications.length === 0 ? (
+                             <div className="px-4 py-4 text-sm text-gray-500 text-center">No notifications</div>
+                           ) : (
+                             notifications.map(n => (
+                               <div 
+                                 key={n.id} 
+                                 onClick={() => handleNotifClick(n.id)}
+                                 className={`px-4 py-3 hover:bg-gray-50 cursor-pointer border-b last:border-0 ${!n.isRead ? 'bg-indigo-50/50' : ''}`}
+                               >
+                                  <p className="text-sm text-gray-800">{n.message}</p>
+                                  <p className="text-xs text-gray-400 mt-1">{new Date(n.createdAt).toLocaleTimeString()}</p>
+                               </div>
+                             ))
+                           )}
+                        </div>
+                      )}
                     </div>
-                    <button
-                      onClick={handleLogout}
-                      className="bg-white p-2 rounded-full text-red-500 hover:bg-red-50 hover:text-red-600 shadow-sm transition-colors border border-gray-200"
-                      title="Logout"
-                    >
-                      <LogOut size={16} />
-                    </button>
-                  </div>
+
+                    <div className="flex items-center space-x-4 bg-gray-100 px-4 py-1.5 rounded-full">
+                      <div className="flex flex-col items-end">
+                         <span className="text-gray-900 text-sm font-semibold leading-none">{user.name}</span>
+                         <span className="text-xs text-gray-500 uppercase tracking-wider">{user.role}</span>
+                      </div>
+                      <button
+                        onClick={handleLogout}
+                        className="bg-white p-2 rounded-full text-red-500 hover:bg-red-50 hover:text-red-600 shadow-sm transition-colors border border-gray-200"
+                        title="Logout"
+                      >
+                        <LogOut size={16} />
+                      </button>
+                    </div>
+                  </>
                 ) : (
                   <div className="flex items-center space-x-3">
                      <Link to="/login" className="text-gray-600 hover:text-indigo-600 font-medium text-sm transition-colors">Login</Link>
-                     <Link to="/register" className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 flex items-center">
+                     <Link to="/login" className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 flex items-center">
                         Get Started <ChevronRight size={16} className="ml-1" />
                      </Link>
                   </div>
@@ -119,7 +179,7 @@ export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
                     <div className="flex items-center">
                        <div className="ml-3">
                          <div className="text-base font-medium leading-none text-gray-800">{user.name}</div>
-                         <div className="text-sm font-medium leading-none text-gray-500 mt-1">{user.email}</div>
+                         <div className="text-sm font-medium leading-none text-gray-500 mt-1">{user.phone}</div>
                        </div>
                     </div>
                     <button onClick={handleLogout} className="ml-auto bg-white p-2 rounded-full text-red-600 shadow-sm border border-gray-200">
@@ -128,8 +188,7 @@ export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
                   </div>
                 ) : (
                   <div className="px-4 space-y-3">
-                    <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center px-4 py-3 border border-gray-300 rounded-md shadow-sm text-base font-medium text-gray-700 bg-white hover:bg-gray-50">Login</Link>
-                    <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center px-4 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700">Sign Up</Link>
+                    <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center px-4 py-3 border border-gray-300 rounded-md shadow-sm text-base font-medium text-gray-700 bg-white hover:bg-gray-50">Login / Sign Up</Link>
                   </div>
                 )}
              </div>

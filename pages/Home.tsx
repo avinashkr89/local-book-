@@ -1,12 +1,14 @@
+
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getServices, searchProviders } from '../services/db';
 import { Service, Provider } from '../types';
-import { Wrench, Zap, SprayCan, BookOpen, Briefcase, Search, MapPin, Star, ArrowRight, ShieldCheck, Clock, UserCheck, X, Mail, Phone, Send } from 'lucide-react';
+import { Wrench, Zap, SprayCan, BookOpen, Briefcase, Search, MapPin, Star, ArrowRight, ShieldCheck, Clock, UserCheck, X, Mail, Phone, Send, Hammer, Paintbrush, Smartphone, Car, Scissors, Truck } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const IconMap: Record<string, React.FC<any>> = {
-  Wrench, Zap, SprayCan, BookOpen, Briefcase
+  Wrench, Zap, SprayCan, BookOpen, Briefcase,
+  Hammer, Paintbrush, Smartphone, Car, Scissors, Truck
 };
 
 export const Home = () => {

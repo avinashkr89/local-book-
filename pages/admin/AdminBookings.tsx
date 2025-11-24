@@ -1,8 +1,9 @@
+
 import React, { useEffect, useState } from 'react';
-import { getBookings, getProviders, updateBookingStatus } from '../../services/db';
+import { getBookings, getProviders, updateBookingStatus, deleteBooking, triggerManualEmailNotification } from '../../services/db';
 import { Booking, BookingStatus, Provider } from '../../types';
 import toast from 'react-hot-toast';
-import { Filter, X } from 'lucide-react';
+import { Filter, X, Download, Trash2, Mail } from 'lucide-react';
 
 export const AdminBookings = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -38,6 +39,34 @@ export const AdminBookings = () => {
     }
   };
 
+  const handleDeleteBooking = async (id: string) => {
+    if (window.confirm('Delete this booking permanently? This is useful for clearing test data.')) {
+      try {
+        await deleteBooking(id);
+        toast.success('Booking deleted');
+        loadData();
+      } catch (e) {
+        toast.error('Failed to delete booking');
+      }
+    }
+  };
+
+  const handleManualEmail = async (booking: Booking) => {
+    if (!booking.provider) {
+      toast.error('No provider assigned to send email to.');
+      return;
+    }
+    
+    const toastId = toast.loading('Sending email to provider...');
+    try {
+      await triggerManualEmailNotification(booking.id);
+      toast.success('Email sent successfully!', { id: toastId });
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to send email. Check console.', { id: toastId });
+    }
+  };
+
   const handleAssignClick = (booking: Booking) => {
     setSelectedBooking(booking);
     setAssignModalOpen(true);
@@ -56,12 +85,47 @@ export const AdminBookings = () => {
     }
   };
 
+  const handleExportCSV = () => {
+    if (filteredBookings.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    const headers = ['ID', 'Date', 'Time', 'Customer', 'Phone', 'Service', 'Provider', 'Area', 'Status', 'Amount'];
+    const rows = filteredBookings.map(b => [
+      b.id,
+      b.date,
+      b.time,
+      b.customer?.name || '',
+      b.customer?.phone || '',
+      b.service?.name || '',
+      b.provider?.user?.name || 'Unassigned',
+      b.area,
+      b.status,
+      b.amount
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(e => e.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `localbookr-export-${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Export downloaded');
+  };
+
   // Filter Logic
   const filteredBookings = bookings.filter(b => 
     statusFilter === 'ALL' ? true : b.status === statusFilter
   );
 
-  // Provider Matching Logic: Active + Matches Service Skill
   const eligibleProviders = selectedBooking 
     ? providers.filter(p => p.isActive && p.skill === selectedBooking.service?.name)
     : [];
@@ -73,6 +137,13 @@ export const AdminBookings = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Booking Management</h1>
         <div className="flex items-center space-x-2">
+          <button 
+            onClick={handleExportCSV}
+            className="flex items-center px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 mr-4"
+          >
+            <Download size={16} className="mr-2" /> Export CSV
+          </button>
+
           <Filter size={18} className="text-gray-500" />
           <select 
             value={statusFilter} 
@@ -113,11 +184,14 @@ export const AdminBookings = () => {
                 <td className="px-6 py-4">
                    <div className="text-sm text-gray-900">{booking.date} @ {booking.time}</div>
                    <div className="text-xs text-gray-500">{booking.area}</div>
+                   {booking.status === 'WAITING' && <span className="text-xs text-orange-500 font-bold">Auto-assigning...</span>}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                     ${booking.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 
-                      booking.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
+                      booking.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 
+                      booking.status === 'WAITING' ? 'bg-orange-100 text-orange-800' :
+                      'bg-blue-100 text-blue-800'}`}>
                     {booking.status}
                   </span>
                 </td>
@@ -128,22 +202,31 @@ export const AdminBookings = () => {
                     <span className="text-red-400 italic">Unassigned</span>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex items-center space-x-2">
                   {booking.status === BookingStatus.PENDING && (
-                    <>
-                      <button onClick={() => handleStatusChange(booking.id, BookingStatus.CONFIRMED)} className="text-green-600 hover:text-green-900">Confirm</button>
-                      <button onClick={() => handleStatusChange(booking.id, BookingStatus.CANCELLED)} className="text-red-600 hover:text-red-900">Cancel</button>
-                    </>
+                    <button onClick={() => handleAssignClick(booking)} className="text-indigo-600 hover:text-indigo-900 border border-indigo-200 px-2 py-1 rounded bg-indigo-50">Assign</button>
                   )}
-                  {booking.status === BookingStatus.CONFIRMED && !booking.providerId && (
-                     <button onClick={() => handleAssignClick(booking)} className="text-indigo-600 hover:text-indigo-900 border border-indigo-200 px-2 py-1 rounded bg-indigo-50">Assign</button>
+                  {booking.status === BookingStatus.WAITING && (
+                     <button onClick={() => handleAssignClick(booking)} className="text-indigo-600 hover:text-indigo-900 border border-indigo-200 px-2 py-1 rounded bg-indigo-50">Force Assign</button>
                   )}
-                  {booking.status === BookingStatus.ASSIGNED && (
-                    <span className="text-gray-400">Waiting for Provider</span>
+                  
+                  {booking.provider && (
+                    <button 
+                      onClick={() => handleManualEmail(booking)}
+                      className="text-blue-500 hover:text-blue-700 p-1.5 rounded hover:bg-blue-50"
+                      title="Send Notification Email to Provider"
+                    >
+                      <Mail size={16} />
+                    </button>
                   )}
-                  {booking.status === BookingStatus.IN_PROGRESS && (
-                    <button onClick={() => handleStatusChange(booking.id, BookingStatus.COMPLETED)} className="text-green-600 hover:text-green-900 border border-green-200 px-2 py-1 rounded bg-green-50">Complete</button>
-                  )}
+                  
+                  <button 
+                    onClick={() => handleDeleteBooking(booking.id)} 
+                    className="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50"
+                    title="Delete Booking (Clear Data)"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </td>
               </tr>
             ))}
@@ -151,21 +234,20 @@ export const AdminBookings = () => {
         </table>
       </div>
 
-      {/* Assign Provider Modal */}
       {assignModalOpen && selectedBooking && (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="px-6 py-4 border-b flex justify-between items-center">
-              <h3 className="text-lg font-medium text-gray-900">Assign Provider for {selectedBooking.service?.name}</h3>
+              <h3 className="text-lg font-medium text-gray-900">Assign Provider</h3>
               <button onClick={() => setAssignModalOpen(false)}><X size={20} /></button>
             </div>
             <div className="p-6">
-              <p className="mb-4 text-sm text-gray-500">Select an available professional for {selectedBooking.area}.</p>
+              <p className="mb-4 text-sm text-gray-500">Select an available professional.</p>
               
               {eligibleProviders.length === 0 ? (
-                <div className="text-center py-4 text-red-500 bg-red-50 rounded">No active providers found with skill: {selectedBooking.service?.name}</div>
+                <div className="text-center py-4 text-red-500 bg-red-50 rounded">No active providers found with matching skill.</div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-60 overflow-y-auto">
                   {eligibleProviders.map(p => (
                     <button
                       key={p.id}

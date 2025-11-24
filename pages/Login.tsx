@@ -3,128 +3,101 @@ import { useAuth } from '../services/authContext';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Role } from '../types';
-import { Briefcase, User } from 'lucide-react';
+import { Lock, Mail, ArrowRight } from 'lucide-react';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loginType, setLoginType] = useState<'CUSTOMER' | 'PROVIDER'>('CUSTOMER');
-  const { login } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const { login, user } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect if already logged in
+  React.useEffect(() => {
+    if (user) {
+      if (user.role === Role.ADMIN) navigate('/admin');
+      else if (user.role === Role.PROVIDER) navigate('/provider');
+      else navigate('/dashboard');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    
     const success = await login(email, password);
+    setIsSubmitting(false);
+
     if (success) {
-      const userStr = localStorage.getItem('localbookr_session');
-      const user = userStr ? JSON.parse(userStr) : null;
-      
-      if (user) {
-        // Logic to handle specific dashboard redirects
-        if (user.role === Role.ADMIN) {
-           toast.success('Welcome Admin');
-           navigate('/admin');
-        } else if (user.role === Role.PROVIDER) {
-           toast.success('Welcome Partner');
-           navigate('/provider');
-        } else {
-           // If they tried to login as Provider but are a Customer, we still let them in
-           // but maybe show a different message? For now, just redirect correctly.
-           if (loginType === 'PROVIDER' && user.role !== Role.PROVIDER) {
-             toast('Logged in as Customer');
-           } else {
-             toast.success('Welcome back!');
-           }
-           navigate('/dashboard');
-        }
-      }
-    } else {
-      toast.error('Invalid credentials');
+      toast.success('Login Successful');
     }
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden border border-gray-100">
-        
-        {/* Header / Tabs */}
-        <div className="flex border-b border-gray-100">
-          <button
-            onClick={() => setLoginType('CUSTOMER')}
-            className={`flex-1 py-4 text-sm font-semibold flex items-center justify-center transition-colors ${
-              loginType === 'CUSTOMER' 
-                ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <User size={18} className="mr-2" /> Customer
-          </button>
-          <button
-            onClick={() => setLoginType('PROVIDER')}
-            className={`flex-1 py-4 text-sm font-semibold flex items-center justify-center transition-colors ${
-              loginType === 'PROVIDER' 
-                ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Briefcase size={18} className="mr-2" /> Provider / Admin
-          </button>
-        </div>
-
+    <div className="min-h-[80vh] flex items-center justify-center bg-gray-50 px-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full overflow-hidden border border-gray-100">
         <div className="p-8">
-          <h2 className="text-2xl font-bold text-center text-gray-900 mb-2">
-            {loginType === 'PROVIDER' ? 'Partner Login' : 'Welcome Back'}
-          </h2>
-          <p className="text-center text-gray-500 text-sm mb-8">
-            {loginType === 'PROVIDER' 
-              ? 'Manage your jobs and earnings.' 
-              : 'Book expert local services instantly.'}
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-              <input
-                type="email"
-                required
-                placeholder={loginType === 'PROVIDER' ? 'partner@localbookr.com' : 'you@example.com'}
-                className="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 mb-4">
+              <Lock size={24} />
             </div>
+            <h2 className="text-2xl font-bold text-gray-900">Welcome Back</h2>
+            <p className="text-gray-500 text-sm mt-2">Login to manage bookings</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                className="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Email Address</label>
+              <div className="flex rounded-md shadow-sm">
+                <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500">
+                  <Mail size={16} />
+                </span>
+                <input
+                  type="email"
+                  required
+                  className="flex-1 min-w-0 block w-full px-3 py-3 border border-gray-300 rounded-r-md focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Password</label>
+              <div className="flex rounded-md shadow-sm">
+                <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500">
+                  <Lock size={16} />
+                </span>
+                <input
+                  type="password"
+                  required
+                  className="flex-1 min-w-0 block w-full px-3 py-3 border border-gray-300 rounded-r-md focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
             </div>
             
             <button
               type="submit"
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transform transition-transform hover:scale-[1.02]"
+              disabled={isSubmitting}
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none transition-transform hover:scale-[1.02] disabled:opacity-70"
             >
-              {loginType === 'PROVIDER' ? 'Login to Dashboard' : 'Sign In'}
+              {isSubmitting ? 'Logging in...' : 'Login'} <ArrowRight size={16} className="ml-2" />
             </button>
           </form>
-          
-          <p className="mt-8 text-center text-sm text-gray-600">
-            {loginType === 'PROVIDER' ? (
-              <span>Interested in joining? Contact Admin.</span>
-            ) : (
-              <>
-                Don't have an account?{' '}
-                <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500 underline">
-                  Create Account
-                </Link>
-              </>
-            )}
-          </p>
+
+          <div className="mt-8 pt-6 border-t border-gray-100 text-center space-y-4">
+             <p className="text-sm text-gray-600">
+               Don't have an account? <Link to="/register" className="font-bold text-indigo-600 hover:text-indigo-800">Sign up</Link>
+             </p>
+             <Link to="/provider-register" className="block text-sm font-medium text-emerald-600 hover:text-emerald-800 border border-emerald-200 rounded-lg py-2 bg-emerald-50">
+               Register as a Service Provider
+             </Link>
+          </div>
         </div>
       </div>
     </div>

@@ -1,8 +1,9 @@
+
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../services/authContext';
-import { getBookings, addBookingRating } from '../services/db';
+import { getBookings, addBookingRating, generateCompletionPin } from '../services/db';
 import { Booking, BookingStatus } from '../types';
-import { Calendar, MapPin, Clock, AlertCircle, Star, X } from 'lucide-react';
+import { Calendar, MapPin, Clock, AlertCircle, Star, X, Lock, ShieldCheck, Eye, EyeOff, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const Dashboard = () => {
@@ -16,8 +17,13 @@ export const Dashboard = () => {
   const [ratingValue, setRatingValue] = useState(5);
   const [reviewText, setReviewText] = useState('');
 
+  // PIN Visibility State
+  const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     loadBookings();
+    const interval = setInterval(loadBookings, 15000); 
+    return () => clearInterval(interval);
   }, [user]);
 
   const loadBookings = async () => {
@@ -25,7 +31,6 @@ export const Dashboard = () => {
       try {
         const allBookings = await getBookings();
         const filtered = allBookings.filter(b => b.customerId === user.id);
-        // Sort by newest first
         setMyBookings(filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
       } catch (e) {
         toast.error('Could not load bookings');
@@ -33,6 +38,15 @@ export const Dashboard = () => {
         setLoading(false);
       }
     }
+  };
+
+  const togglePin = (id: string) => {
+    setRevealedPins(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const copyPin = (pin: string) => {
+    navigator.clipboard.writeText(pin);
+    toast.success('PIN Copied!');
   };
 
   const openRatingModal = (booking: Booking) => {
@@ -55,8 +69,10 @@ export const Dashboard = () => {
       );
       toast.success('Thank you for your feedback!', { id: toastId });
       setIsRatingModalOpen(false);
-      loadBookings(); // Reload to show the rating is done
-    } catch (e) {
+      loadBookings(); 
+    } catch (e: any) {
+      const msg = e.message || 'Unknown error';
+      console.error("Submit Rating Error:", msg);
       toast.error('Failed to submit feedback', { id: toastId });
     }
   };
@@ -69,6 +85,7 @@ export const Dashboard = () => {
       case 'IN_PROGRESS': return 'bg-purple-100 text-purple-800';
       case 'COMPLETED': return 'bg-green-100 text-green-800';
       case 'CANCELLED': return 'bg-red-100 text-red-800';
+      case 'WAITING': return 'bg-orange-100 text-orange-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -90,69 +107,116 @@ export const Dashboard = () => {
       ) : (
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <ul className="divide-y divide-gray-200">
-            {myBookings.map((booking) => (
-              <li key={booking.id}>
-                <div className="px-4 py-4 sm:px-6 hover:bg-gray-50 transition">
-                  <div className="flex items-center justify-between">
-                    <p className="text-lg font-medium text-indigo-600 truncate">
-                      {booking.service?.name || 'Service'}
-                    </p>
-                    <div className="flex items-center space-x-2">
-                      <div className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(booking.status)}`}>
-                        {booking.status}
+            {myBookings.map((booking) => {
+               const pin = generateCompletionPin(booking.id, booking.createdAt);
+               const isRevealed = revealedPins[booking.id];
+
+               return (
+                <li key={booking.id}>
+                  <div className="px-4 py-4 sm:px-6 hover:bg-gray-50 transition">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="flex-1">
+                        <p className="text-lg font-medium text-indigo-600 truncate">
+                          {booking.service?.name || 'Service'}
+                        </p>
+                        {booking.status === 'WAITING' && (
+                          <p className="text-xs text-orange-500 font-bold mt-1">Finding nearby provider...</p>
+                        )}
                       </div>
                       
-                      {/* Rating Button - Only for Completed & Unrated bookings */}
-                      {booking.status === BookingStatus.COMPLETED && !booking.rating && (
-                        <button 
-                          onClick={() => openRatingModal(booking)}
-                          className="text-xs font-medium text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1 rounded-full shadow-sm transition-colors flex items-center"
-                        >
-                          <Star size={12} className="mr-1" fill="currentColor" /> Rate Service
-                        </button>
-                      )}
-
-                      {booking.rating && (
-                        <div className="flex items-center text-yellow-500">
-                          <Star size={14} fill="currentColor" />
-                          <span className="text-xs font-bold ml-1">{booking.rating}</span>
+                      <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+                        <div className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(booking.status)}`}>
+                          {booking.status}
                         </div>
-                      )}
+                        
+                        {booking.status === BookingStatus.COMPLETED && !booking.rating && (
+                          <button 
+                            onClick={() => openRatingModal(booking)}
+                            className="text-xs font-medium text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1.5 rounded-full shadow-sm transition-colors flex items-center whitespace-nowrap"
+                          >
+                            <Star size={12} className="mr-1" fill="currentColor" /> Rate Service
+                          </button>
+                        )}
+
+                        {booking.rating && (
+                          <div className="flex items-center text-yellow-500 bg-yellow-50 px-2 py-1 rounded-full border border-yellow-100">
+                            <Star size={14} fill="currentColor" />
+                            <span className="text-xs font-bold ml-1">{booking.rating}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
+                    
+                    <div className="mt-4 sm:flex sm:justify-between">
+                      <div className="sm:flex sm:gap-6">
+                        <p className="flex items-center text-sm text-gray-500 mb-2 sm:mb-0">
+                          <Calendar className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
+                          {booking.date}
+                        </p>
+                        <p className="flex items-center text-sm text-gray-500 mb-2 sm:mb-0">
+                          <Clock className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
+                          {booking.time}
+                        </p>
+                        <p className="flex items-center text-sm text-gray-500 mb-2 sm:mb-0">
+                          <MapPin className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
+                          {booking.area}
+                        </p>
+                      </div>
+                      <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
+                        <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded">₹{booking.amount}</span>
+                      </div>
+                    </div>
+                    
+                    {booking.provider && (
+                      <div className="mt-3 text-sm text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100 flex justify-between items-center">
+                        <div>
+                          <span className="font-semibold text-gray-700">Provider:</span> {booking.provider.user?.name}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CUSTOMER PIN VIEW */}
+                    {(booking.status === BookingStatus.ASSIGNED || booking.status === BookingStatus.IN_PROGRESS) && (
+                      <div className="mt-4 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg p-4 flex flex-col sm:flex-row justify-between items-center gap-4 animate-fade-in">
+                          <div className="flex items-start">
+                            <div className="bg-white p-2 rounded-full shadow-sm text-indigo-600 mr-3">
+                              <ShieldCheck size={20} />
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-bold text-indigo-900">Completion PIN</h4>
+                              <p className="text-xs text-indigo-700 max-w-xs mt-1">
+                                Give this PIN to the provider <strong>only after</strong> the job is done.
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                             <div className={`bg-white px-4 py-2 rounded-lg border-2 border-indigo-100 shadow-sm min-w-[120px] text-center transition-all ${!isRevealed ? 'blur-sm select-none' : ''}`}>
+                                <span className="font-mono text-xl font-bold tracking-[0.2em] text-indigo-600">
+                                  {pin}
+                                </span>
+                             </div>
+                             
+                             <button onClick={() => togglePin(booking.id)} className="p-2 text-indigo-500 hover:bg-indigo-100 rounded-full" title={isRevealed ? "Hide" : "Show"}>
+                               {isRevealed ? <EyeOff size={18} /> : <Eye size={18} />}
+                             </button>
+                             
+                             <button onClick={() => copyPin(pin)} className="p-2 text-indigo-500 hover:bg-indigo-100 rounded-full" title="Copy">
+                               <Copy size={18} />
+                             </button>
+                          </div>
+                      </div>
+                    )}
+
+                    {booking.review && (
+                      <div className="mt-3 text-sm text-gray-600 italic border-l-2 border-gray-300 pl-3">
+                        " {booking.review} "
+                      </div>
+                    )}
                   </div>
-                  
-                  <div className="mt-2 sm:flex sm:justify-between">
-                    <div className="sm:flex">
-                      <p className="flex items-center text-sm text-gray-500">
-                        <Calendar className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
-                        {booking.date}
-                      </p>
-                      <p className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
-                        <Clock className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
-                        {booking.time}
-                      </p>
-                      <p className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
-                        <MapPin className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
-                        {booking.area}
-                      </p>
-                    </div>
-                    <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
-                       <span className="font-bold text-gray-900">₹{booking.amount}</span>
-                    </div>
-                  </div>
-                  {booking.provider && (
-                    <div className="mt-2 text-sm text-gray-500 bg-gray-50 p-2 rounded border border-gray-100">
-                      <span className="font-semibold">Assigned Professional:</span> {booking.provider.user?.name} ({booking.provider.skill})
-                    </div>
-                  )}
-                  {booking.review && (
-                    <div className="mt-2 text-sm text-gray-600 italic">
-                      " {booking.review} "
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -180,9 +244,6 @@ export const Dashboard = () => {
                   </button>
                 ))}
               </div>
-              <p className="text-sm font-bold text-indigo-600 mt-2">
-                {ratingValue === 5 ? 'Excellent!' : ratingValue === 4 ? 'Good' : ratingValue === 3 ? 'Average' : 'Poor'}
-              </p>
             </div>
 
             <textarea 
@@ -195,7 +256,7 @@ export const Dashboard = () => {
 
             <button 
               onClick={submitRating}
-              className="w-full mt-4 bg-indigo-600 text-white font-bold py-2 rounded-lg hover:bg-indigo-700 shadow-lg transition-all"
+              className="w-full mt-4 bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 shadow-lg transition-all"
             >
               Submit Review
             </button>

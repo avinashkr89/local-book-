@@ -10,6 +10,7 @@ import { Role } from './types';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { ProviderRegister } from './pages/ProviderRegister';
 import { Dashboard } from './pages/Dashboard';
 import { BookService } from './pages/BookService';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
@@ -28,6 +29,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/provider-register" element={<ProviderRegister />} />
             
             {/* Customer Routes */}
             <Route path="/book/:serviceId" element={

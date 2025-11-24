@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { getServices, createService, deleteService, updateService } from '../../services/db';
 import { Service } from '../../types';
@@ -9,7 +10,7 @@ export const AdminServices = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   
-  const [formData, setFormData] = useState({ name: '', description: '', basePrice: '', icon: 'Wrench' });
+  const [formData, setFormData] = useState({ name: '', description: '', basePrice: '', maxPrice: '', icon: 'Wrench' });
 
   useEffect(() => {
     loadServices();
@@ -38,6 +39,7 @@ export const AdminServices = () => {
       name: service.name,
       description: service.description,
       basePrice: service.basePrice.toString(),
+      maxPrice: service.maxPrice ? service.maxPrice.toString() : '',
       icon: service.icon
     });
     setIsModalOpen(true);
@@ -45,31 +47,27 @@ export const AdminServices = () => {
 
   const handleAddClick = () => {
     setEditingServiceId(null);
-    setFormData({ name: '', description: '', basePrice: '', icon: 'Wrench' });
+    setFormData({ name: '', description: '', basePrice: '', maxPrice: '', icon: 'Wrench' });
     setIsModalOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const payload = {
+      name: formData.name,
+      description: formData.description,
+      basePrice: Number(formData.basePrice),
+      maxPrice: formData.maxPrice ? Number(formData.maxPrice) : undefined,
+      icon: formData.icon
+    };
+
     try {
       if (editingServiceId) {
-        // Edit Mode
-        await updateService(editingServiceId, {
-          name: formData.name,
-          description: formData.description,
-          basePrice: Number(formData.basePrice),
-          icon: formData.icon
-        });
-        toast.success('Service updated successfully');
+        await updateService(editingServiceId, payload);
+        toast.success('Service updated');
       } else {
-        // Create Mode
-        await createService({
-          name: formData.name,
-          description: formData.description,
-          basePrice: Number(formData.basePrice),
-          icon: formData.icon
-        });
-        toast.success('Service added successfully');
+        await createService(payload);
+        toast.success('Service added');
       }
       
       loadServices();
@@ -77,6 +75,11 @@ export const AdminServices = () => {
     } catch (e) {
       toast.error('Operation failed');
     }
+  };
+
+  const formatPrice = (base: number, max?: number) => {
+    if (max && max > base) return `₹${base} - ₹${max}`;
+    return `₹${base}`;
   };
 
   return (
@@ -95,14 +98,12 @@ export const AdminServices = () => {
               <button 
                 onClick={() => handleEditClick(service)} 
                 className="text-blue-500 hover:text-blue-700 p-1 bg-blue-50 rounded"
-                title="Edit Price/Details"
               >
                 <Edit2 size={16} />
               </button>
               <button 
                 onClick={() => handleDelete(service.id)} 
                 className="text-red-500 hover:text-red-700 p-1 bg-red-50 rounded"
-                title="Delete Service"
               >
                 <Trash2 size={16} />
               </button>
@@ -110,15 +111,14 @@ export const AdminServices = () => {
             
             <h3 className="font-bold text-lg text-gray-900">{service.name}</h3>
             <p className="text-sm text-gray-500 mt-1 min-h-[40px]">{service.description}</p>
-            <p className="mt-4 text-xl font-bold text-indigo-600">₹{service.basePrice}</p>
-            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded mt-2 inline-block">Icon: {service.icon}</span>
+            <p className="mt-4 text-xl font-bold text-indigo-600">{formatPrice(service.basePrice, service.maxPrice)}</p>
           </div>
         ))}
       </div>
 
       {isModalOpen && (
          <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 animate-slide-up">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
              <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-gray-900">{editingServiceId ? 'Edit Service' : 'Add New Service'}</h3>
                 <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
@@ -127,34 +127,44 @@ export const AdminServices = () => {
              <form onSubmit={handleSubmit} className="space-y-4">
                <div>
                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Service Name</label>
-                 <input className="w-full border border-gray-300 p-2 rounded focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                 <input className="w-full border p-2 rounded" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
                </div>
-               
                <div>
                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Description</label>
-                 <textarea className="w-full border border-gray-300 p-2 rounded focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none" rows={3} placeholder="Description" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} required />
+                 <textarea className="w-full border p-2 rounded resize-none" rows={3} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} required />
                </div>
                
-               <div>
-                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Base Price (₹)</label>
-                 <input className="w-full border border-gray-300 p-2 rounded focus:ring-indigo-500 focus:border-indigo-500 outline-none" type="number" placeholder="Base Price" value={formData.basePrice} onChange={e => setFormData({...formData, basePrice: e.target.value})} required />
+               <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Base Price (₹)</label>
+                    <input className="w-full border p-2 rounded" type="number" value={formData.basePrice} onChange={e => setFormData({...formData, basePrice: e.target.value})} required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Max Price (₹)</label>
+                    <input className="w-full border p-2 rounded" type="number" placeholder="Optional" value={formData.maxPrice} onChange={e => setFormData({...formData, maxPrice: e.target.value})} />
+                  </div>
                </div>
                
                <div>
                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Icon</label>
-                 <select className="w-full border border-gray-300 p-2 rounded focus:ring-indigo-500 focus:border-indigo-500 outline-none" value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})}>
+                 <select className="w-full border p-2 rounded" value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})}>
                    <option value="Wrench">Wrench (Repair)</option>
-                   <option value="Zap">Zap (Electric)</option>
+                   <option value="Zap">Zap (Electrical)</option>
                    <option value="SprayCan">SprayCan (Cleaning)</option>
-                   <option value="BookOpen">Book (Education)</option>
+                   <option value="BookOpen">Book (Tuition)</option>
                    <option value="Briefcase">Briefcase (General)</option>
+                   <option value="Hammer">Hammer (Carpentry)</option>
+                   <option value="Paintbrush">Paintbrush (Painting)</option>
+                   <option value="Smartphone">Smartphone (Tech Repair)</option>
+                   <option value="Car">Car (Mechanic/Wash)</option>
+                   <option value="Scissors">Scissors (Salon/Beauty)</option>
+                   <option value="Truck">Truck (Movers)</option>
                  </select>
                </div>
 
-               <div className="flex justify-end space-x-3 pt-4">
-                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-medium">Cancel</button>
-                 <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 shadow-lg">{editingServiceId ? 'Update Service' : 'Save Service'}</button>
-               </div>
+               <button type="submit" className="w-full px-6 py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 shadow-lg mt-2">
+                 {editingServiceId ? 'Update Service' : 'Save Service'}
+               </button>
              </form>
           </div>
          </div>

@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User } from '../types';
-import { findUserByEmail, initializeDB } from './db';
+import { User, Role } from '../types';
+import { authenticateUser, initializeDB, createUser } from './db';
 import toast from 'react-hot-toast';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, passwordHash: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (user: Omit<User, 'id' | 'createdAt'>) => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -18,31 +19,55 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
 
   useEffect(() => {
     const init = async () => {
-      await initializeDB();
-      const storedUser = localStorage.getItem('localbookr_session');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+      try {
+        await initializeDB();
+        const storedUser = localStorage.getItem('localbookr_session');
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
+        }
+      } catch (e) {
+        console.error("Auth Init Error:", e);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     init();
   }, []);
 
-  const login = async (email: string, passwordHash: string) => {
+  const login = async (email: string, passwordHash: string): Promise<boolean> => {
     try {
-      const foundUser = await findUserByEmail(email);
+      const appUser = await authenticateUser(email, passwordHash);
       
-      // NOTE: In a real production app, do NOT compare plain text/simple hashes on client.
-      // This is maintained as per the prompt's simple auth requirement without full Auth server.
-      if (foundUser && foundUser.passwordHash === passwordHash) {
-        setUser(foundUser);
-        localStorage.setItem('localbookr_session', JSON.stringify(foundUser));
+      if (appUser) {
+        // Special check: If provider, check if active
+        if (appUser.role === Role.PROVIDER) {
+          // In a real app, you'd fetch provider status here.
+          // For now, we rely on the dashboard to block access or show pending message
+        }
+
+        setUser(appUser);
+        localStorage.setItem('localbookr_session', JSON.stringify(appUser));
         return true;
+      } else {
+        toast.error('Invalid Credentials');
+        return false;
       }
-      return false;
     } catch (e) {
-      console.error(e);
-      toast.error("Login error");
+      console.error("Login Exception:", e);
+      toast.error("Login failed");
+      return false;
+    }
+  };
+
+  const register = async (newUser: Omit<User, 'id' | 'createdAt'>): Promise<boolean> => {
+    try {
+      const createdUser = await createUser(newUser);
+      // Auto login after register
+      setUser(createdUser);
+      localStorage.setItem('localbookr_session', JSON.stringify(createdUser));
+      return true;
+    } catch (e: any) {
+      toast.error(e.message || "Registration failed");
       return false;
     }
   };
@@ -53,7 +78,7 @@ export const AuthProvider = ({ children }: React.PropsWithChildren<{}>) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

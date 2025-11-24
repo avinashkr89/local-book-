@@ -65,13 +65,13 @@ export const AdminDashboard = () => {
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard 
           title="Total Revenue" 
-          value={`₹${stats.revenue}`} 
+          value={`₹${stats.revenue.toFixed(2)}`} 
           icon={DollarSign} 
           color="bg-emerald-500" 
         />
         <StatCard 
           title="Total Commission (10%)" 
-          value={`₹${stats.commission}`} 
+          value={`₹${stats.commission.toFixed(2)}`} 
           icon={TrendingUp} 
           color="bg-indigo-500" 
         />

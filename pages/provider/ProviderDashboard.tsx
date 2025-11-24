@@ -1,34 +1,46 @@
+
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../services/authContext';
-import { getBookings, getProviders, updateBookingStatus } from '../../services/db';
+import { getBookings, getProviders, updateBookingStatus, verifyAndCompleteJob } from '../../services/db';
 import { Booking, BookingStatus } from '../../types';
 import toast from 'react-hot-toast';
-import { Phone, MapPin, Calendar, PlayCircle, CheckCircle } from 'lucide-react';
+import { Phone, MapPin, Calendar, PlayCircle, CheckCircle, Lock, X } from 'lucide-react';
 
 export const ProviderDashboard = () => {
   const { user } = useAuth();
   const [myJobs, setMyJobs] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // OTP Verification Modal
+  const [otpModalJob, setOtpModalJob] = useState<string | null>(null);
+  const [completionPin, setCompletionPin] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
+    // Poll for auto-assignments every 30 seconds
+    const interval = setInterval(() => {
+      loadJobs();
+    }, 30000);
     loadJobs();
+    return () => clearInterval(interval);
   }, [user]);
 
   const loadJobs = async () => {
     if (user) {
       try {
-        // 1. Find Provider ID linked to this User ID
         const providers = await getProviders();
-        const me = providers.find(p => p.userId === user.id);
+        const me = providers.find(p => p.userId === user.id); 
+        const meByPhone = providers.find(p => p.user?.phone === user.phone); 
+
+        const providerId = me?.id || meByPhone?.id;
         
-        if (me) {
+        if (providerId) {
           const allBookings = await getBookings();
-          // Filter jobs assigned to this provider
-          const jobs = allBookings.filter(b => b.providerId === me.id && b.status !== BookingStatus.CANCELLED);
-          setMyJobs(jobs);
+          const jobs = allBookings.filter(b => b.providerId === providerId && b.status !== BookingStatus.CANCELLED);
+          setMyJobs(jobs.reverse());
         }
       } catch (e) {
-        toast.error('Failed to load jobs');
+        console.error(e);
       } finally {
         setLoading(false);
       }
@@ -36,12 +48,44 @@ export const ProviderDashboard = () => {
   };
 
   const handleStatusUpdate = async (id: string, status: BookingStatus) => {
+    if (status === BookingStatus.COMPLETED) {
+      // Open OTP Modal instead of completing immediately
+      setOtpModalJob(id);
+      setCompletionPin('');
+    } else {
+      try {
+        await updateBookingStatus(id, status);
+        toast.success('Job status updated');
+        loadJobs();
+      } catch (e) {
+        toast.error('Update failed');
+      }
+    }
+  };
+
+  const handleVerifyAndComplete = async () => {
+    if (!otpModalJob) return;
+    if (completionPin.length !== 6) {
+      toast.error('Please enter a 6-digit PIN');
+      return;
+    }
+
+    setIsVerifying(true);
     try {
-      await updateBookingStatus(id, status);
-      toast.success('Job status updated');
-      loadJobs();
+      // Use the robust verification function
+      const isValid = await verifyAndCompleteJob(otpModalJob, completionPin);
+      
+      if (isValid) {
+        toast.success('PIN Verified! Job Completed.');
+        setOtpModalJob(null);
+        loadJobs();
+      } else {
+        toast.error('Incorrect PIN. Please check with customer.');
+      }
     } catch (e) {
-      toast.error('Update failed');
+      toast.error('Verification system error.');
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -50,11 +94,10 @@ export const ProviderDashboard = () => {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">Provider Portal</h1>
-      <p className="text-gray-600">Manage your assigned jobs in Aurangabad.</p>
 
       {myJobs.length === 0 ? (
          <div className="bg-white p-8 rounded-lg shadow text-center text-gray-500">
-           No jobs assigned yet.
+           No jobs assigned yet. Auto-assignment system is active...
          </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">
@@ -104,7 +147,7 @@ export const ProviderDashboard = () => {
                 {job.status === BookingStatus.ASSIGNED && (
                   <button 
                     onClick={() => handleStatusUpdate(job.id, BookingStatus.IN_PROGRESS)}
-                    className="flex-1 flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+                    className="flex-1 flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
                   >
                     <PlayCircle className="mr-2 h-4 w-4" /> Start Job
                   </button>
@@ -112,17 +155,67 @@ export const ProviderDashboard = () => {
                 {job.status === BookingStatus.IN_PROGRESS && (
                   <button 
                     onClick={() => handleStatusUpdate(job.id, BookingStatus.COMPLETED)}
-                    className="flex-1 flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+                    className="flex-1 flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition-colors"
                   >
-                    <CheckCircle className="mr-2 h-4 w-4" /> Mark Completed
+                    <CheckCircle className="mr-2 h-4 w-4" /> Complete Job
                   </button>
                 )}
                 {job.status === BookingStatus.COMPLETED && (
-                  <p className="w-full text-center text-green-600 font-medium text-sm py-2">Job Completed</p>
+                  <p className="w-full text-center text-green-600 font-medium text-sm py-2 bg-green-50 rounded">Job Completed</p>
                 )}
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* OTP Verification Modal */}
+      {otpModalJob && (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full animate-slide-up relative">
+            
+            <button 
+              onClick={() => setOtpModalJob(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="text-center mb-6">
+              <div className="mx-auto h-14 w-14 bg-indigo-100 rounded-full flex items-center justify-center mb-4">
+                <Lock size={28} className="text-indigo-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Job Verification</h3>
+              <p className="text-sm text-gray-500 mt-2">
+                Ask the customer for the 6-digit PIN visible in their app to confirm completion.
+              </p>
+            </div>
+            
+            <input 
+              type="text" 
+              maxLength={6}
+              autoFocus
+              className="w-full text-center text-3xl tracking-[0.5em] font-bold border-2 border-gray-200 rounded-xl py-3 mb-6 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all placeholder-gray-200"
+              placeholder="••••••"
+              value={completionPin}
+              onChange={(e) => {
+                // Only allow numbers
+                if (/^\d*$/.test(e.target.value)) {
+                  setCompletionPin(e.target.value);
+                }
+              }}
+            />
+
+            <button 
+              onClick={handleVerifyAndComplete}
+              disabled={isVerifying || completionPin.length !== 6}
+              className="w-full py-3.5 text-white bg-indigo-600 rounded-xl font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center"
+            >
+              {isVerifying ? (
+                 <span className="flex items-center"><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div> Verifying...</span>
+              ) : 'Verify & Complete'}
+            </button>
+          </div>
         </div>
       )}
     </div>
