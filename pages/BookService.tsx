@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { getServices, createBooking, getProviders } from '../services/db';
 import { useAuth } from '../services/authContext';
 import { Service, Provider } from '../types';
 import toast from 'react-hot-toast';
-import { Calendar, Clock, MapPin, FileText, CheckCircle, ChevronRight, ChevronLeft, Shield, CreditCard } from 'lucide-react';
+import { Calendar, Clock, MapPin, FileText, CheckCircle, ChevronRight, ChevronLeft, Shield, CreditCard, Lock } from 'lucide-react';
 
 export const BookService = () => {
   const { serviceId } = useParams();
@@ -227,17 +228,30 @@ export const BookService = () => {
 
                 <div className="bg-indigo-50 rounded-2xl p-6 border border-indigo-100 relative overflow-hidden">
                    <div className="relative z-10">
-                      <div className="flex justify-between items-center mb-4 pb-4 border-b border-indigo-200">
+                      <div className="flex justify-between items-center mb-2">
                          <span className="text-indigo-800 font-medium">Service Cost</span>
                          <span className="text-2xl font-bold text-indigo-900">₹{service.basePrice}</span>
                       </div>
+                      
+                      {/* Token Breakdown Visual */}
+                      <div className="bg-white/60 rounded-lg p-3 mb-4 text-xs">
+                         <div className="flex justify-between text-indigo-700 mb-1">
+                            <span>Booking Token (Refundable)</span>
+                            <span className="font-bold">₹0 (Free)</span>
+                         </div>
+                         <div className="flex justify-between text-indigo-700">
+                            <span>Pay after service</span>
+                            <span className="font-bold">₹{service.basePrice}</span>
+                         </div>
+                      </div>
+
                       <div className="space-y-3 text-sm text-indigo-900">
                          <div className="flex items-center"><Calendar size={16} className="mr-2 opacity-70"/> {formData.date}</div>
                          <div className="flex items-center"><Clock size={16} className="mr-2 opacity-70"/> {formData.time}</div>
                          <div className="flex items-center"><MapPin size={16} className="mr-2 opacity-70"/> {formData.area}</div>
                       </div>
                       <div className="mt-4 pt-4 border-t border-indigo-200 flex items-center text-xs text-indigo-700">
-                         <CreditCard size={14} className="mr-1" /> Pay via Cash/UPI after service
+                         <Lock size={14} className="mr-1" /> Secure Booking • Pay Directly to Provider
                       </div>
                    </div>
                 </div>

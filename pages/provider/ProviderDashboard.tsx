@@ -1,10 +1,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../services/authContext';
-import { getBookings, getProviders, updateBookingStatus, verifyAndCompleteJob } from '../../services/db';
+import { getBookings, getProviders, updateBookingStatus, verifyAndCompleteJob, updateProvider, getWhatsAppLink } from '../../services/db';
+import { getOneSignalPlayerId, requestNotificationPermission } from '../../services/push';
 import { Booking, BookingStatus } from '../../types';
 import toast from 'react-hot-toast';
-import { Phone, MapPin, Calendar, PlayCircle, CheckCircle, Lock, X } from 'lucide-react';
+import { Phone, MapPin, Calendar, PlayCircle, CheckCircle, Lock, X, Bell, MessageCircle } from 'lucide-react';
 
 export const ProviderDashboard = () => {
   const { user } = useAuth();
@@ -17,11 +18,35 @@ export const ProviderDashboard = () => {
   const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
+    const initData = async () => {
+      await loadJobs();
+      
+      // Initialize OneSignal for this provider
+      try {
+        const playerId = await getOneSignalPlayerId();
+        if (playerId) {
+           // Save to DB associated with this provider
+           const providers = await getProviders();
+           const me = providers.find(p => p.userId === user?.id);
+           if (me && me.oneSignalId !== playerId) {
+              await updateProvider(me.id, { oneSignalId: playerId });
+              console.log("OneSignal ID Saved:", playerId);
+           }
+        } else {
+           // If no ID yet, prompt might be needed
+           console.log("OneSignal: No Player ID yet. Permission might be required.");
+        }
+      } catch (e) {
+        console.error("Push Init Error", e);
+      }
+    };
+
     // Poll for auto-assignments every 30 seconds
     const interval = setInterval(() => {
       loadJobs();
     }, 30000);
-    loadJobs();
+    
+    if (user) initData();
     return () => clearInterval(interval);
   }, [user]);
 
@@ -49,7 +74,6 @@ export const ProviderDashboard = () => {
 
   const handleStatusUpdate = async (id: string, status: BookingStatus) => {
     if (status === BookingStatus.COMPLETED) {
-      // Open OTP Modal instead of completing immediately
       setOtpModalJob(id);
       setCompletionPin('');
     } else {
@@ -72,7 +96,6 @@ export const ProviderDashboard = () => {
 
     setIsVerifying(true);
     try {
-      // Use the robust verification function
       const isValid = await verifyAndCompleteJob(otpModalJob, completionPin);
       
       if (isValid) {
@@ -93,7 +116,15 @@ export const ProviderDashboard = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Provider Portal</h1>
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-gray-900">Provider Portal</h1>
+        <button 
+          onClick={requestNotificationPermission}
+          className="flex items-center text-sm bg-indigo-50 text-indigo-600 px-3 py-1 rounded hover:bg-indigo-100 transition-colors"
+        >
+          <Bell size={16} className="mr-2" /> Enable Notifications
+        </button>
+      </div>
 
       {myJobs.length === 0 ? (
          <div className="bg-white p-8 rounded-lg shadow text-center text-gray-500">
@@ -138,6 +169,20 @@ export const ProviderDashboard = () => {
                    </div>
                 </div>
               </div>
+              
+              {/* WhatsApp Button for Provider */}
+              {job.customer?.phone && (
+                 <div className="mt-3">
+                    <a 
+                      href={getWhatsAppLink(job.customer.phone, `Hi ${job.customer.name}, I'm your provider from LocalBookr. Reaching out about the job.`)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center text-sm text-green-700 bg-green-50 px-3 py-2 rounded-md hover:bg-green-100 border border-green-200 transition-colors"
+                    >
+                      <MessageCircle size={16} className="mr-2" /> Contact Customer (WhatsApp)
+                    </a>
+                 </div>
+              )}
 
               <div className="mt-4 bg-gray-50 p-3 rounded text-sm text-gray-700">
                 <span className="font-semibold">Problem:</span> {job.description}
@@ -173,14 +218,12 @@ export const ProviderDashboard = () => {
       {otpModalJob && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full animate-slide-up relative">
-            
             <button 
               onClick={() => setOtpModalJob(null)}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
             >
               <X size={20} />
             </button>
-
             <div className="text-center mb-6">
               <div className="mx-auto h-14 w-14 bg-indigo-100 rounded-full flex items-center justify-center mb-4">
                 <Lock size={28} className="text-indigo-600" />
@@ -190,7 +233,6 @@ export const ProviderDashboard = () => {
                 Ask the customer for the 6-digit PIN visible in their app to confirm completion.
               </p>
             </div>
-            
             <input 
               type="text" 
               maxLength={6}
@@ -199,17 +241,13 @@ export const ProviderDashboard = () => {
               placeholder="••••••"
               value={completionPin}
               onChange={(e) => {
-                // Only allow numbers
-                if (/^\d*$/.test(e.target.value)) {
-                  setCompletionPin(e.target.value);
-                }
+                if (/^\d*$/.test(e.target.value)) setCompletionPin(e.target.value);
               }}
             />
-
             <button 
               onClick={handleVerifyAndComplete}
               disabled={isVerifying || completionPin.length !== 6}
-              className="w-full py-3.5 text-white bg-indigo-600 rounded-xl font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center"
+              className="w-full py-3.5 text-white bg-indigo-600 rounded-xl font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 flex items-center justify-center"
             >
               {isVerifying ? (
                  <span className="flex items-center"><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div> Verifying...</span>

@@ -1,9 +1,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../services/authContext';
-import { getBookings, addBookingRating, generateCompletionPin } from '../services/db';
+import { getBookings, addBookingRating, getStaticBookingPin, getWhatsAppLink } from '../services/db';
 import { Booking, BookingStatus } from '../types';
-import { Calendar, MapPin, Clock, AlertCircle, Star, X, Lock, ShieldCheck, Eye, EyeOff, Copy } from 'lucide-react';
+import { Calendar, MapPin, Clock, AlertCircle, Star, X, ShieldCheck, Eye, EyeOff, Copy, MessageCircle, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const Dashboard = () => {
@@ -11,13 +11,11 @@ export const Dashboard = () => {
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Rating Modal State
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
   const [selectedBookingForRating, setSelectedBookingForRating] = useState<Booking | null>(null);
   const [ratingValue, setRatingValue] = useState(5);
   const [reviewText, setReviewText] = useState('');
 
-  // PIN Visibility State
   const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -58,7 +56,6 @@ export const Dashboard = () => {
 
   const submitRating = async () => {
     if (!selectedBookingForRating) return;
-
     const toastId = toast.loading('Submitting feedback...');
     try {
       await addBookingRating(
@@ -67,199 +64,189 @@ export const Dashboard = () => {
         reviewText,
         selectedBookingForRating.providerId || undefined
       );
-      toast.success('Thank you for your feedback!', { id: toastId });
+      toast.success('Feedback submitted!', { id: toastId });
       setIsRatingModalOpen(false);
       loadBookings(); 
     } catch (e: any) {
-      const msg = e.message || 'Unknown error';
-      console.error("Submit Rating Error:", msg);
       toast.error('Failed to submit feedback', { id: toastId });
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusStyle = (status: string) => {
     switch (status) {
-      case 'PENDING': return 'bg-yellow-100 text-yellow-800';
-      case 'CONFIRMED': return 'bg-blue-100 text-blue-800';
-      case 'ASSIGNED': return 'bg-indigo-100 text-indigo-800';
-      case 'IN_PROGRESS': return 'bg-purple-100 text-purple-800';
-      case 'COMPLETED': return 'bg-green-100 text-green-800';
-      case 'CANCELLED': return 'bg-red-100 text-red-800';
-      case 'WAITING': return 'bg-orange-100 text-orange-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'PENDING': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'CONFIRMED': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'ASSIGNED': return 'bg-indigo-50 text-indigo-700 border-indigo-100';
+      case 'IN_PROGRESS': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'COMPLETED': return 'bg-green-100 text-green-800 border-green-200';
+      case 'CANCELLED': return 'bg-red-50 text-red-700 border-red-100';
+      case 'WAITING': return 'bg-orange-50 text-orange-700 border-orange-100';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  if (loading) return <div className="p-4">Loading your dashboard...</div>;
+  if (loading) return <div className="p-10 text-center"><div className="animate-spin rounded-full h-8 w-8 border-2 border-primary mx-auto"></div></div>;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">My Bookings</h1>
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div className="flex items-end justify-between">
+        <div>
+           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">My Bookings</h1>
+           <p className="text-gray-500 mt-1">Track your active services and history</p>
+        </div>
       </div>
 
       {myBookings.length === 0 ? (
-        <div className="bg-white p-12 rounded-lg shadow-sm text-center border border-gray-200">
-          <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No bookings found</h3>
-          <p className="mt-1 text-sm text-gray-500">Get started by booking a service from the home page.</p>
+        <div className="bg-white p-16 rounded-3xl shadow-sm text-center border border-dashed border-gray-300">
+          <div className="inline-flex bg-gray-50 p-4 rounded-full mb-4">
+             <Clock className="h-8 w-8 text-gray-400" />
+          </div>
+          <h3 className="mt-2 text-lg font-bold text-gray-900">No bookings yet</h3>
+          <p className="mt-1 text-gray-500 max-w-xs mx-auto">Looks like you haven't booked any services. Explore our categories to get started.</p>
         </div>
       ) : (
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
-          <ul className="divide-y divide-gray-200">
-            {myBookings.map((booking) => {
-               const pin = generateCompletionPin(booking.id, booking.createdAt);
+        <div className="space-y-6">
+          {myBookings.map((booking) => {
+               const pin = getStaticBookingPin(booking.id);
                const isRevealed = revealedPins[booking.id];
+               const isCompleted = booking.status === BookingStatus.COMPLETED;
 
                return (
-                <li key={booking.id}>
-                  <div className="px-4 py-4 sm:px-6 hover:bg-gray-50 transition">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="text-lg font-medium text-indigo-600 truncate">
-                          {booking.service?.name || 'Service'}
-                        </p>
-                        {booking.status === 'WAITING' && (
-                          <p className="text-xs text-orange-500 font-bold mt-1">Finding nearby provider...</p>
-                        )}
-                      </div>
-                      
-                      <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
-                        <div className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(booking.status)}`}>
-                          {booking.status}
-                        </div>
-                        
-                        {booking.status === BookingStatus.COMPLETED && !booking.rating && (
-                          <button 
-                            onClick={() => openRatingModal(booking)}
-                            className="text-xs font-medium text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1.5 rounded-full shadow-sm transition-colors flex items-center whitespace-nowrap"
-                          >
-                            <Star size={12} className="mr-1" fill="currentColor" /> Rate Service
-                          </button>
-                        )}
-
-                        {booking.rating && (
-                          <div className="flex items-center text-yellow-500 bg-yellow-50 px-2 py-1 rounded-full border border-yellow-100">
-                            <Star size={14} fill="currentColor" />
-                            <span className="text-xs font-bold ml-1">{booking.rating}</span>
+                <div key={booking.id} className="bg-white rounded-3xl p-6 shadow-card border border-gray-100 transition-all hover:shadow-lg">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-gray-50 pb-4">
+                       <div className="flex items-center">
+                          <div className="h-12 w-12 rounded-2xl bg-gray-50 flex items-center justify-center text-gray-600 mr-4 font-bold text-lg">
+                             {booking.service?.name.charAt(0)}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="mt-4 sm:flex sm:justify-between">
-                      <div className="sm:flex sm:gap-6">
-                        <p className="flex items-center text-sm text-gray-500 mb-2 sm:mb-0">
-                          <Calendar className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
-                          {booking.date}
-                        </p>
-                        <p className="flex items-center text-sm text-gray-500 mb-2 sm:mb-0">
-                          <Clock className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
-                          {booking.time}
-                        </p>
-                        <p className="flex items-center text-sm text-gray-500 mb-2 sm:mb-0">
-                          <MapPin className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
-                          {booking.area}
-                        </p>
-                      </div>
-                      <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
-                        <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded">₹{booking.amount}</span>
-                      </div>
-                    </div>
-                    
-                    {booking.provider && (
-                      <div className="mt-3 text-sm text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100 flex justify-between items-center">
-                        <div>
-                          <span className="font-semibold text-gray-700">Provider:</span> {booking.provider.user?.name}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* CUSTOMER PIN VIEW */}
-                    {(booking.status === BookingStatus.ASSIGNED || booking.status === BookingStatus.IN_PROGRESS) && (
-                      <div className="mt-4 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg p-4 flex flex-col sm:flex-row justify-between items-center gap-4 animate-fade-in">
-                          <div className="flex items-start">
-                            <div className="bg-white p-2 rounded-full shadow-sm text-indigo-600 mr-3">
-                              <ShieldCheck size={20} />
-                            </div>
-                            <div>
-                              <h4 className="text-sm font-bold text-indigo-900">Completion PIN</h4>
-                              <p className="text-xs text-indigo-700 max-w-xs mt-1">
-                                Give this PIN to the provider <strong>only after</strong> the job is done.
-                              </p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-2">
-                             <div className={`bg-white px-4 py-2 rounded-lg border-2 border-indigo-100 shadow-sm min-w-[120px] text-center transition-all ${!isRevealed ? 'blur-sm select-none' : ''}`}>
-                                <span className="font-mono text-xl font-bold tracking-[0.2em] text-indigo-600">
-                                  {pin}
-                                </span>
+                          <div>
+                             <h3 className="text-lg font-bold text-gray-900">{booking.service?.name || 'Service'}</h3>
+                             <div className="flex items-center text-xs text-gray-500 mt-0.5">
+                                <Calendar size={12} className="mr-1" /> {booking.date} at {booking.time}
                              </div>
-                             
-                             <button onClick={() => togglePin(booking.id)} className="p-2 text-indigo-500 hover:bg-indigo-100 rounded-full" title={isRevealed ? "Hide" : "Show"}>
-                               {isRevealed ? <EyeOff size={18} /> : <Eye size={18} />}
-                             </button>
-                             
-                             <button onClick={() => copyPin(pin)} className="p-2 text-indigo-500 hover:bg-indigo-100 rounded-full" title="Copy">
-                               <Copy size={18} />
-                             </button>
                           </div>
-                      </div>
-                    )}
+                       </div>
+                       
+                       <div className="flex items-center gap-3">
+                          <span className="font-bold text-gray-900 bg-gray-50 px-3 py-1 rounded-lg border border-gray-100">₹{booking.amount}</span>
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getStatusStyle(booking.status)}`}>
+                            {booking.status}
+                          </span>
+                       </div>
+                    </div>
 
-                    {booking.review && (
-                      <div className="mt-3 text-sm text-gray-600 italic border-l-2 border-gray-300 pl-3">
-                        " {booking.review} "
-                      </div>
-                    )}
-                  </div>
-                </li>
-              );
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                       {/* Left: Details */}
+                       <div className="space-y-3">
+                          <div className="flex items-start">
+                             <MapPin size={16} className="text-gray-400 mt-0.5 mr-2" />
+                             <div>
+                                <p className="text-sm font-medium text-gray-900">Service Location</p>
+                                <p className="text-xs text-gray-500">{booking.address}, {booking.area}</p>
+                             </div>
+                          </div>
+                          {booking.provider ? (
+                             <div className="flex items-start">
+                                <div className="mt-0.5 mr-2 h-4 w-4 rounded-full bg-green-100 flex items-center justify-center text-[10px] font-bold text-green-700">
+                                   {booking.provider.user?.name.charAt(0)}
+                                </div>
+                                <div>
+                                   <p className="text-sm font-medium text-gray-900">Provider Assigned</p>
+                                   <p className="text-xs text-gray-500">{booking.provider.user?.name}</p>
+                                   {booking.provider.user?.phone && (
+                                      <a href={getWhatsAppLink(booking.provider.user.phone, 'Hi')} target="_blank" className="text-[10px] text-green-600 font-bold flex items-center mt-1 hover:underline">
+                                         <MessageCircle size={10} className="mr-1"/> Chat on WhatsApp
+                                      </a>
+                                   )}
+                                </div>
+                             </div>
+                          ) : (
+                             <div className="flex items-center text-xs text-orange-500 bg-orange-50 p-2 rounded-lg w-fit">
+                                <AlertCircle size={14} className="mr-1" /> Waiting for provider assignment
+                             </div>
+                          )}
+                       </div>
+
+                       {/* Right: Actions */}
+                       <div className="flex flex-col justify-center items-end gap-3">
+                          {/* PIN Card */}
+                          {(booking.status === BookingStatus.ASSIGNED || booking.status === BookingStatus.IN_PROGRESS) && (
+                             <div className="w-full bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-3 border border-indigo-100 flex items-center justify-between">
+                                <div className="flex items-center">
+                                   <div className="bg-white p-1.5 rounded-lg text-indigo-600 shadow-sm mr-3">
+                                      <ShieldCheck size={16} />
+                                   </div>
+                                   <div>
+                                      <p className="text-xs font-bold text-indigo-900">Job PIN</p>
+                                      <p className="text-[10px] text-indigo-700">Share when job is done</p>
+                                   </div>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                   <span className={`font-mono font-bold text-lg text-indigo-700 tracking-widest ${!isRevealed ? 'blur-sm' : ''}`}>{pin}</span>
+                                   <button onClick={() => togglePin(booking.id)} className="p-1.5 hover:bg-indigo-100 rounded-lg text-indigo-500 ml-2"><Eye size={14}/></button>
+                                </div>
+                             </div>
+                          )}
+
+                          {isCompleted && !booking.rating && (
+                             <button onClick={() => openRatingModal(booking)} className="w-full py-2 bg-gray-900 text-white rounded-xl text-sm font-bold shadow-lg hover:bg-black transition-colors flex items-center justify-center">
+                                <Star size={14} className="mr-2" /> Rate Service
+                             </button>
+                          )}
+
+                          {booking.rating && (
+                             <div className="flex items-center text-sm font-bold text-gray-900 bg-yellow-50 px-3 py-1.5 rounded-xl border border-yellow-100">
+                                <Star size={14} className="text-yellow-500 fill-current mr-1.5" /> You rated: {booking.rating}/5
+                             </div>
+                          )}
+                       </div>
+                    </div>
+                </div>
+               );
             })}
-          </ul>
         </div>
       )}
 
       {/* Rating Modal */}
       {isRatingModalOpen && (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 animate-slide-up">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-900">Rate Service</h3>
-              <button onClick={() => setIsRatingModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
-            </div>
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 animate-slide-up relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-br from-indigo-500 to-purple-600"></div>
+            <button onClick={() => setIsRatingModalOpen(false)} className="absolute top-4 right-4 text-white/80 hover:text-white z-10"><X size={24}/></button>
             
-            <div className="text-center mb-6">
-              <p className="text-sm text-gray-500 mb-4">How was the service provided by <br/> <span className="font-bold text-gray-800">{selectedBookingForRating?.provider?.user?.name || 'the provider'}</span>?</p>
-              
-              <div className="flex justify-center space-x-2">
+            <div className="relative pt-8 text-center">
+               <div className="h-16 w-16 bg-white rounded-2xl mx-auto shadow-lg flex items-center justify-center text-3xl mb-4 font-bold text-indigo-600">
+                  {selectedBookingForRating?.service?.name.charAt(0)}
+               </div>
+               <h3 className="text-xl font-bold text-gray-900">Rate your Experience</h3>
+               <p className="text-sm text-gray-500 mt-1">How was the {selectedBookingForRating?.service?.name} service?</p>
+               
+               <div className="flex justify-center space-x-2 my-6">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button
                     key={star}
                     onClick={() => setRatingValue(star)}
-                    className={`transform transition-transform hover:scale-110 focus:outline-none ${star <= ratingValue ? 'text-yellow-400' : 'text-gray-200'}`}
+                    className={`transform transition-all hover:scale-110 focus:outline-none ${star <= ratingValue ? 'text-yellow-400 scale-110' : 'text-gray-200'}`}
                   >
-                    <Star size={32} fill="currentColor" />
+                    <Star size={36} fill="currentColor" />
                   </button>
                 ))}
               </div>
+
+              <textarea 
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none resize-none transition-all"
+                rows={3}
+                placeholder="Write a short review (optional)..."
+                value={reviewText}
+                onChange={(e) => setReviewText(e.target.value)}
+              ></textarea>
+
+              <button 
+                onClick={submitRating}
+                className="w-full mt-4 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-black shadow-lg hover:shadow-xl transition-all"
+              >
+                Submit Review
+              </button>
             </div>
-
-            <textarea 
-              className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none"
-              rows={3}
-              placeholder="Write a short review..."
-              value={reviewText}
-              onChange={(e) => setReviewText(e.target.value)}
-            ></textarea>
-
-            <button 
-              onClick={submitRating}
-              className="w-full mt-4 bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 shadow-lg transition-all"
-            >
-              Submit Review
-            </button>
           </div>
         </div>
       )}

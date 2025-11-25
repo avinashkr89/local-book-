@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../services/authContext';
 import { getNotifications, markNotificationRead } from '../services/db';
 import { Role, Notification } from '../types';
-import { LogOut, User as UserIcon, Menu, X, ChevronRight, Bell } from 'lucide-react';
+import { LogOut, User as UserIcon, Menu, X, ChevronRight, Bell, Home } from 'lucide-react';
 
 export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
   const { user, logout } = useAuth();
@@ -17,7 +18,6 @@ export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
 
   useEffect(() => {
     if (user) {
-      // Poll notifications every 10s (Simulating real-time)
       const fetchNotifs = async () => {
         const data = await getNotifications(user.id);
         setNotifications(data);
@@ -40,38 +40,40 @@ export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
-  const NavLink = ({ to, label }: { to: string, label: string }) => {
+  const NavLink = ({ to, label, icon: Icon }: { to: string, label: string, icon?: any }) => {
     const isActive = location.pathname === to;
     return (
       <Link
         to={to}
-        className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+        className={`flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
           isActive 
-            ? 'bg-indigo-600 text-white shadow-md transform scale-105' 
-            : 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-600'
+            ? 'bg-primary/10 text-primary' 
+            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
         }`}
       >
+        {Icon && <Icon size={16} className="mr-2" />}
         {label}
       </Link>
     );
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      <nav className="sticky top-0 z-50 glass border-b border-gray-200/50 shadow-sm">
+    <div className="min-h-screen bg-gray-50 flex flex-col font-sans selection:bg-primary/20">
+      <nav className="sticky top-0 z-50 glass">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <div className="flex items-center">
-              <Link to="/" className="flex items-center group">
-                <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-lg group-hover:rotate-3 transition-transform">
-                  L
-                </div>
-                <span className="ml-2 text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
-                  LocalBookr
-                </span>
-              </Link>
-              <div className="hidden md:block ml-10 flex items-baseline space-x-2">
+            <div className="flex items-center cursor-pointer" onClick={() => navigate('/')}>
+              <div className="w-9 h-9 bg-gradient-to-br from-primary to-indigo-700 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-primary/20">
+                L
+              </div>
+              <span className="ml-2 text-xl font-bold tracking-tight text-gray-900">
+                LocalBookr
+              </span>
+            </div>
+            
+            {/* Desktop Nav */}
+            <div className="hidden md:flex ml-10 space-x-1">
                 <NavLink to="/" label="Home" />
                 {user?.role === Role.CUSTOMER && <NavLink to="/dashboard" label="My Bookings" />}
                 {user?.role === Role.ADMIN && (
@@ -83,40 +85,39 @@ export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
                   </>
                 )}
                 {user?.role === Role.PROVIDER && <NavLink to="/provider" label="Portal" />}
-              </div>
             </div>
             
             {/* Desktop Auth */}
-            <div className="hidden md:block">
-              <div className="ml-4 flex items-center md:ml-6 space-x-4">
+            <div className="hidden md:block ml-auto">
+              <div className="flex items-center space-x-4">
                 {user ? (
                   <>
                     {/* Notification Bell */}
                     <div className="relative">
                       <button 
                         onClick={() => setShowNotifs(!showNotifs)}
-                        className="p-2 text-gray-500 hover:text-indigo-600 relative"
+                        className="p-2 text-gray-500 hover:text-primary relative transition-colors rounded-full hover:bg-gray-100"
                       >
                         <Bell size={20} />
                         {unreadCount > 0 && (
-                          <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
+                          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
                         )}
                       </button>
                       
                       {showNotifs && (
-                        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl ring-1 ring-black ring-opacity-5 py-1 z-50 max-h-96 overflow-y-auto">
-                           <div className="px-4 py-2 border-b text-xs font-bold text-gray-400 uppercase">Notifications</div>
+                        <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-card ring-1 ring-black ring-opacity-5 py-1 z-50 max-h-96 overflow-y-auto border border-gray-100">
+                           <div className="px-4 py-3 border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">Notifications</div>
                            {notifications.length === 0 ? (
-                             <div className="px-4 py-4 text-sm text-gray-500 text-center">No notifications</div>
+                             <div className="px-4 py-8 text-sm text-gray-500 text-center">No new notifications</div>
                            ) : (
                              notifications.map(n => (
                                <div 
                                  key={n.id} 
                                  onClick={() => handleNotifClick(n.id)}
-                                 className={`px-4 py-3 hover:bg-gray-50 cursor-pointer border-b last:border-0 ${!n.isRead ? 'bg-indigo-50/50' : ''}`}
+                                 className={`px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0 ${!n.isRead ? 'bg-blue-50/60' : ''}`}
                                >
-                                  <p className="text-sm text-gray-800">{n.message}</p>
-                                  <p className="text-xs text-gray-400 mt-1">{new Date(n.createdAt).toLocaleTimeString()}</p>
+                                  <p className="text-sm text-gray-800 font-medium">{n.message}</p>
+                                  <p className="text-xs text-gray-400 mt-1">{new Date(n.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
                                </div>
                              ))
                            )}
@@ -124,25 +125,28 @@ export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
                       )}
                     </div>
 
-                    <div className="flex items-center space-x-4 bg-gray-100 px-4 py-1.5 rounded-full">
-                      <div className="flex flex-col items-end">
-                         <span className="text-gray-900 text-sm font-semibold leading-none">{user.name}</span>
-                         <span className="text-xs text-gray-500 uppercase tracking-wider">{user.role}</span>
+                    <div className="flex items-center pl-4 border-l border-gray-200">
+                      <div className="flex flex-col items-end mr-3">
+                         <span className="text-gray-900 text-sm font-bold leading-none">{user.name}</span>
+                         <span className="text-xs text-gray-500 font-medium uppercase tracking-wider mt-0.5">{user.role}</span>
+                      </div>
+                      <div className="h-8 w-8 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center text-gray-600 font-bold border-2 border-white shadow-sm">
+                        {user.name.charAt(0)}
                       </div>
                       <button
                         onClick={handleLogout}
-                        className="bg-white p-2 rounded-full text-red-500 hover:bg-red-50 hover:text-red-600 shadow-sm transition-colors border border-gray-200"
+                        className="ml-2 p-2 text-gray-400 hover:text-red-500 transition-colors"
                         title="Logout"
                       >
-                        <LogOut size={16} />
+                        <LogOut size={18} />
                       </button>
                     </div>
                   </>
                 ) : (
                   <div className="flex items-center space-x-3">
-                     <Link to="/login" className="text-gray-600 hover:text-indigo-600 font-medium text-sm transition-colors">Login</Link>
-                     <Link to="/login" className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 flex items-center">
-                        Get Started <ChevronRight size={16} className="ml-1" />
+                     <Link to="/login" className="text-gray-600 hover:text-gray-900 font-medium text-sm transition-colors">Login</Link>
+                     <Link to="/register" className="bg-gray-900 text-white px-5 py-2.5 rounded-xl text-sm font-medium shadow-lg shadow-gray-900/20 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 flex items-center">
+                        Sign Up
                      </Link>
                   </div>
                 )}
@@ -151,7 +155,7 @@ export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
 
             {/* Mobile menu button */}
             <div className="-mr-2 flex md:hidden">
-              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="inline-flex items-center justify-center p-2 rounded-md text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 focus:outline-none">
+              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="inline-flex items-center justify-center p-2 rounded-xl text-gray-500 hover:text-primary hover:bg-gray-100 focus:outline-none">
                 {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
               </button>
             </div>
@@ -160,37 +164,36 @@ export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-white border-t border-gray-100 absolute w-full shadow-xl animate-slide-up">
-             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-                 <Link to="/" onClick={() => setMobileMenuOpen(false)} className="text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 block px-3 py-3 rounded-md text-base font-medium">Home</Link>
-                 {user?.role === Role.CUSTOMER && <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 block px-3 py-3 rounded-md text-base font-medium">My Bookings</Link>}
-                 {user?.role === Role.ADMIN && (
-                    <>
-                      <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 block px-3 py-3 rounded-md text-base font-medium">Dashboard</Link>
-                      <Link to="/admin/bookings" onClick={() => setMobileMenuOpen(false)} className="text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 block px-3 py-3 rounded-md text-base font-medium">Bookings</Link>
-                    </>
+          <div className="md:hidden bg-white border-t border-gray-100 absolute w-full shadow-xl animate-slide-up z-50">
+             <div className="px-4 pt-4 pb-6 space-y-2">
+                 <NavLink to="/" label="Home" icon={Home} />
+                 {user?.role === Role.CUSTOMER && <NavLink to="/dashboard" label="My Bookings" />}
+                 {user?.role === Role.ADMIN && <NavLink to="/admin" label="Admin Dashboard" />}
+                 {user?.role === Role.PROVIDER && <NavLink to="/provider" label="Provider Portal" />}
+                 
+                 {!user && (
+                   <div className="pt-4 mt-4 border-t border-gray-100 grid grid-cols-2 gap-3">
+                      <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center px-4 py-3 border border-gray-200 rounded-xl text-base font-medium text-gray-700 bg-white">Login</Link>
+                      <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center px-4 py-3 rounded-xl text-base font-medium text-white bg-primary">Sign Up</Link>
+                   </div>
                  )}
-                 {user?.role === Role.PROVIDER && <Link to="/provider" onClick={() => setMobileMenuOpen(false)} className="text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 block px-3 py-3 rounded-md text-base font-medium">Portal</Link>}
-             </div>
-             
-             <div className="pt-4 pb-4 border-t border-gray-100 bg-gray-50">
-                {user ? (
-                  <div className="px-4 flex items-center justify-between">
-                    <div className="flex items-center">
-                       <div className="ml-3">
-                         <div className="text-base font-medium leading-none text-gray-800">{user.name}</div>
-                         <div className="text-sm font-medium leading-none text-gray-500 mt-1">{user.phone}</div>
-                       </div>
-                    </div>
-                    <button onClick={handleLogout} className="ml-auto bg-white p-2 rounded-full text-red-600 shadow-sm border border-gray-200">
-                      <LogOut size={20} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="px-4 space-y-3">
-                    <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block w-full text-center px-4 py-3 border border-gray-300 rounded-md shadow-sm text-base font-medium text-gray-700 bg-white hover:bg-gray-50">Login / Sign Up</Link>
-                  </div>
-                )}
+                 
+                 {user && (
+                   <div className="pt-4 mt-4 border-t border-gray-100">
+                      <div className="flex items-center mb-4 px-2">
+                        <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold mr-3">
+                          {user.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="text-base font-bold text-gray-900">{user.name}</div>
+                          <div className="text-sm text-gray-500">{user.email}</div>
+                        </div>
+                      </div>
+                      <button onClick={handleLogout} className="w-full flex items-center justify-center px-4 py-3 border border-red-100 text-red-600 bg-red-50 rounded-xl font-medium">
+                        <LogOut size={18} className="mr-2" /> Logout
+                      </button>
+                   </div>
+                 )}
              </div>
           </div>
         )}
@@ -200,17 +203,16 @@ export const Layout = ({ children }: React.PropsWithChildren<{}>) => {
         {children}
       </main>
 
-      <footer className="bg-white border-t border-gray-200 mt-auto">
+      <footer className="bg-white border-t border-gray-100 mt-auto">
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center">
-           <div className="mb-4 md:mb-0">
-              <span className="font-bold text-gray-900 text-lg">LocalBookr</span>
-              <p className="text-gray-500 text-sm">Trusted services in Aurangabad.</p>
+           <div className="mb-4 md:mb-0 text-center md:text-left">
+              <span className="font-bold text-gray-900 text-lg tracking-tight">LocalBookr</span>
+              <p className="text-gray-500 text-sm mt-1">Your trusted partner for home services.</p>
            </div>
            
-           {/* Developer Credit */}
            <div className="text-center">
-             <p className="text-gray-600 font-medium text-sm bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-2 rounded-full border border-gray-100 shadow-sm">
-               Developed with <span className="text-red-500 animate-pulse">❤️</span> by <span className="text-indigo-600 font-bold">AVINASH</span>
+             <p className="text-gray-600 font-medium text-sm">
+               Aurangabad, Bihar
              </p>
              <p className="text-xs text-gray-400 mt-1">© 2025 LocalBookr Inc.</p>
            </div>

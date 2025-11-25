@@ -47,6 +47,7 @@ export interface Provider {
   experienceYears?: number;
   bio?: string;
   isDeleted?: boolean;
+  oneSignalId?: string; // For Web Push Notifications
 }
 
 export interface Booking {
